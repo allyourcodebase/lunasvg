@@ -1,0 +1,16 @@
+.{
+    .name = "lunasvg",
+    .version = "0.0.0",
+    .minimum_zig_version = "0.13.0",
+    .dependencies = .{
+        .lunasvg = .{
+            .url = "https://github.com/sammycage/lunasvg/archive/b34b08c1c7dfb90008255559510dd3e5eb897a12.tar.gz",
+            .hash = "1220841997bbf7a90e509de1984b7f61d516e287696e3d514730d3ce0a52e9f23571",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
