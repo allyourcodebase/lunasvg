@@ -8,28 +8,31 @@ pub fn build(b: *std.Build) void {
     const lunasvg_root = lunasvg_dep.path(".");
 
     const static_lib = addLunasvg(b, target, optimize, .static);
-    _ = addLunasvg(b, target, optimize, .shared);
+    _ = addLunasvg(b, target, optimize, .dynamic);
 
     {
-        const exe = b.addExecutable(.{
-            .name = "svg2png",
+        const exe_mod = b.createModule(.{
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
+            .link_libcpp = true,
         });
-        exe.addIncludePath(lunasvg_dep.path("3rdparty/stb"));
-        exe.addCSourceFiles(.{
+
+        exe_mod.addIncludePath(lunasvg_dep.path("3rdparty/stb"));
+        exe_mod.addCSourceFiles(.{
             .root = lunasvg_root,
             .files = &.{ "svg2png.cpp" },
         });
-        exe.linkLibCpp();
+        exe_mod.linkLibrary(static_lib);
 
-        exe.linkLibrary(static_lib);
+        const exe = b.addExecutable(.{
+            .name = "svg2png",
+            .root_module = exe_mod,
+        });
         b.installArtifact(exe);
 
         const run_cmd = b.addRunArtifact(exe);
-        if (b.args) |args| {
-            run_cmd.addArgs(args);
-        }
+        run_cmd.addPassthruArgs();
         const run_step = b.step("svg2png", "Run svg2png");
         run_step.dependOn(&run_cmd.step);
     }
@@ -39,29 +42,29 @@ pub fn addLunasvg(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    kind: enum { static, shared },
+    linkage: std.lang.LinkMode,
 ) *std.Build.Step.Compile {
     const lunasvg_dep = b.dependency("lunasvg", .{});
 
-    const lib = switch (kind) {
-        .static => b.addStaticLibrary(.{
-            .name = "lunasvg-static",
-            .target = target,
-            .optimize = optimize,
-        }),
-        .shared => b.addSharedLibrary(.{
-            .name = "lunasvg",
-            .target = target,
-            .optimize = optimize,
-        }),
-    };
+    const module = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
 
-    lib.addIncludePath(lunasvg_dep.path("include"));
-    lib.addIncludePath(lunasvg_dep.path("3rdparty/plutovg"));
+    const lib = b.addLibrary(.{
+        .name = "lunasvg-static",
+        .root_module = module,
+        .linkage = linkage,
+    });
 
-    switch (kind) {
+    module.addIncludePath(lunasvg_dep.path("include"));
+    module.addIncludePath(lunasvg_dep.path("3rdparty/plutovg"));
+
+    switch (linkage) {
         .static => {
-            lib.defineCMacro("LUNASVG_BUILD_STATIC", "");
+            module.addCMacro("LUNASVG_BUILD_STATIC", "");
             lib.installHeader(
                 lunasvg_dep.path("include/lunasvg.h"),
                 "lunasvg-unconfigured.h",
@@ -75,15 +78,14 @@ pub fn addLunasvg(
                 "lunasvg.h",
             );
         },
-        .shared => {
-            lib.defineCMacro("LUNASVG_BUILD", "");
+        .dynamic => {
+            module.addCMacro("LUNASVG_BUILD", "");
         },
     }
-    lib.addCSourceFiles(.{
+    module.addCSourceFiles(.{
         .root = lunasvg_dep.path("."),
         .files = &lunasvg_files,
     });
-    lib.linkLibCpp();
     b.installArtifact(lib);
     return lib;
 }
